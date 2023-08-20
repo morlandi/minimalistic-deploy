@@ -1,0 +1,15 @@
+{
+    "example":
+    {
+        "address": "example.brainstorm.it",
+        "disabled": false,
+        "ssh_user": "master",
+        "vars": {
+            "username": "example",
+            "branch": "master",
+            "use_ssl": false
+        }
+    }
+}
+
+

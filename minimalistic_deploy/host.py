@@ -1,77 +1,13 @@
-#!/usr/bin/env python3
-import subprocess
-import argparse
-import copy
 import logging
-import os
-import platform
-import jinja2
-import json
-import inspect
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict
 from collections import UserDict
+import jinja2
+import json
+from .ssh_client import SSHClient
+from .utils import merge_dicts
 
 logger = logging.getLogger("deploy")
-from ssh_client import SSHClient
-
-
-def merge_dicts(d1, d2):
-    """
-    Merge two dictionaries;
-    on case of keys collision, the second parameter overrides the first
-
-    Example:
-        merge_dicts({'a': 1, 'b': 2}, {'c': 3, 'a': 100})
-        {'a': 100, 'b': 2, 'c': 3}
-    """
-    return {**d1, **d2}
-
-
-class UserDictJsonEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, UserDict):
-            return obj.data
-        return json.JSONEncoder.default(self, obj)
-
-
-
-@dataclass
-class Action:
-    title: str = ''
-    type: str = ''
-    become: bool = False
-    become_user: str = ''
-    timeout: int = 0
-    wrap_bash: bool = True
-    when: str = ''
-    register: str = ''
-    items: List[str] = field(default_factory=list)
-    extra: Dict = field(default_factory = lambda: ({}))
-
-    # The following works but is not required any more
-    # @classmethod
-    # def from_dict(cls, env):      
-    #     """
-    #     Build the dataclass collecting all nexpected params, if any, in a separate  "extra" dict.
-    #     Adapted from: [How does one ignore extra arguments passed to a dataclass?](https://stackoverflow.com/questions/54678337/how-does-one-ignore-extra-arguments-passed-to-a-dataclass)
-    #     """
-    #     cls_parameters = inspect.signature(cls).parameters
-    #     extra = {
-    #         k: v for k, v in env.items() 
-    #         if k not in cls_parameters
-    #     }
-    #     kwargs = {
-    #         k: v for k, v in env.items() 
-    #         if k in cls_parameters
-    #     }
-    #     return cls(**kwargs, extra=extra)
-
-    def __str__(self):
-        return str(self.title)
-
-    def __repr__(self):
-        return "Action<%s>" % json.dumps(asdict(self), indent=4)
 
 
 class Context(UserDict):
@@ -81,6 +17,13 @@ class Context(UserDict):
 
     def __repr__(self):
         return "Context<%s>" % json.dumps(self.data, indent=4)
+
+
+class UserDictJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, UserDict):
+            return obj.data
+        return json.JSONEncoder.default(self, obj)
 
 
 @dataclass
@@ -256,7 +199,7 @@ class Host():
 
     def execute_mkdirs(self, action):
 
-        command = "mkdir -p " 
+        command = "mkdir -p "
         if "mode" in action.extra:
             command += "-m %s " % action.extra["mode"]
         command += self.render_string(' '.join(action.items))
@@ -406,44 +349,6 @@ class Host():
             self.results[action.register] = result
         return result
 
-
-    def run_rsync_bak(self, action, source, destination, silent):
-        """
-
-        """
-
-        def remote_host(action):
-            text = ''
-            if self.ssh_user:
-                text += self.ssh_user + "@"
-            text += self.address
-            return text
-
-        remote_command = 'rsync -avz --progress '
-        if action.timeout:
-            remote_command +=  '--timeout=%d ' % action.timeout
-        if not action.extra.get('force', False):
-            remote_command += '--ignore-existing '
-
-        mode = action.extra.get('mode', '')
-        if mode:
-            remote_command += f'--chmod="{mode}" '
-
-        owner = action.extra.get('owner', '')
-        group = action.extra.get('group', '')
-        chown = f'{owner}:{group}'
-        if len(chown) > 1:
-            remote_command += f'--chown="{chown}" '
-
-        if action.become:
-            remote_command += '--rsync-path="sudo -u %s rsync" ' % (action.become_user or "root")
-        remote_command += f'"{source}" '
-        remote_command += f'"{remote_host(action)}:{destination}" '
-
-        result = self._run_remote_command_bak(action, remote_command, silent)
-
-        return result
-
     def run_ssh(self, action, command, silent):
         """
         Prepare command for remote execution and run_ssh it
@@ -471,90 +376,6 @@ class Host():
             wrap_bash=action.wrap_bash,
         )
 
-        if action.register:
-            self.results[action.register] = result
-        return result
-
-    def run_ssh_bak(self, action, command, silent):
-        """
-        Prepare command for remote execution and run_ssh it
-        Example:
-            ssh -o ConnectTimeout=5 master@192.168.98.18 "sudo -H --non-interactive ls /home" 
-        """
-        wrapped_command = ""
-        if action.become:
-            wrapped_command += "sudo -H --non-interactive "
-            if action.become_user:
-                wrapped_command += "-u %s " % action.become_user
-            #wrapped_command += "/bin/bash -c \"cd && "
-        #wrapped_command += command + "\""
-        if action.wrap_bash:
-            wrapped_command += "/bin/bash -c \"cd && "
-
-        wrapped_command += command
-
-        if action.wrap_bash:
-            wrapped_command += "\""
-
-        #
-        # "Escaping single quotes in shell for postgresql"
-        # https://stackoverflow.com/questions/24095203/escaping-single-quotes-in-shell-for-postgresql
-        #
-        # > What I usually do is use double quotes (") for postgres -c's argument
-        #   and escaped double quotes (\") for psql -c's argument.
-        #   That way, I can use single quotes (') inside the SQL string with no problem:
-        #
-        #         su postgres -c "psql -c \"SELECT 'hi'  \" "
-        #
-
-        wrapped_command = wrapped_command.replace('"', '\\"')
-
-        #remote_command = 'ssh -o ConnectTimeout=5 '
-        remote_command = 'ssh '
-        if action.timeout:
-            remote_command += '-o ConnectTimeout=%d ' % action.timeout
-        if self.ssh_user:
-            remote_command += self.ssh_user + "@"
-        remote_command += self.address
-        remote_command += " \"%s\"" % wrapped_command
-
-        result = self._run_remote_command_bak(action, remote_command, silent)
-        return result
-
-    def _run_remote_command_bak(self, action, remote_command, silent):
-
-        remote_command = self.render_string(remote_command)
-        
-        logger.debug(remote_command)
-        result = ''
-        if not self.dry_run:
-
-            # rc = os.system(remote_command)
-            # if rc != 0:
-            #     raise Exception("Previous command failed with error code: %d" % rc)
-            
-            try:
-                result = subprocess.check_output(
-                    remote_command,
-                    shell=True,
-                    stderr=subprocess.STDOUT,
-                    encoding='utf-8',
-                )
-                if not silent:
-                    self.print_message(result)
-            except subprocess.CalledProcessError as e:
-                if not silent:
-                    print('ERROR ....................: ' + e.output)
-                raise
-
-            # result = subprocess.check_output(
-            #     remote_command,
-            #     shell=True,
-            #     stderr=subprocess.STDOUT,
-            #     encoding='utf-8',
-            # )
-
-        logger.debug(result)
         if action.register:
             self.results[action.register] = result
         return result

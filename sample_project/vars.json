@@ -1,0 +1,16 @@
+{
+    "home": "/home/{{username}}",
+    "project_name": "example",
+    "project_instance": "{{username}}",
+    "database": {
+        "host": "localhost",
+        "name": "{{username}}",
+        "password": "f8711dd4065eec4c",
+        "encoding": "UTF-8"
+    },
+    "project": {
+        "repo_host": "gitlab.brainstorm.it",
+        "repo": "git@{{project.repo_host}}:brainstorm/example.git",
+        "website_home": "{{home}}/{{project_name}}"
+    }
+}

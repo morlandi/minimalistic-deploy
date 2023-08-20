@@ -1,0 +1,20 @@
+[
+    {
+        "title": "Check target",
+        "type": "command",
+        "become": true,
+        "register": "target_version",
+        "timeout": 5,
+        "items": [
+            "lsb_release -a | grep -i description &2>/dev/null"
+        ]
+    },
+    {
+        "title": "Create user",
+        "type": "command",
+        "become": true,
+        "items": [
+            "useradd --create-home --shell /bin/bash {{username}} || echo \"User already exists.\""
+        ]
+    }
+]

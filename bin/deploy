@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from deploy import main
+from minimalistic_deploy import main
 
 if __name__ == '__main__':
     main()

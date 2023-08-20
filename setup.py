@@ -13,7 +13,7 @@ def get_version(*file_paths):
     raise RuntimeError('Unable to find version string.')
 
 
-version = get_version("deploy", "__init__.py")
+version = get_version("minimalistic_deploy", "__init__.py")
 readme = open('README.md').read()
 history = open('HISTORY.md').read().replace('.. :changelog:', '')
 
@@ -36,9 +36,10 @@ setup(name='minimalistic-deploy',
       author_email='morlandi@brainstorm.it',
       license='MIT',
       scripts=['bin/deploy'],
-      packages=['deploy'],
-      # install_requires=[
-      #     'markdown',
-      # ],
+      packages=['minimalistic_deploy'],
+      install_requires=[
+        "Jinja2 >= 3.1.2",
+        "rich >= 13.5.2",
+      ],
       include_package_data=False,
       zip_safe=False)

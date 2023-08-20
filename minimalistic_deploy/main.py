@@ -6,7 +6,9 @@ import logging
 import os
 import traceback
 
-from deploy_utils import *
+from .host import Host, Context
+from .action import Action
+from .utils import merge_dicts, load_json_file
 
 try:
     import rich
@@ -17,24 +19,14 @@ except ModuleNotFoundError:
 logger = logging.getLogger("deploy")
 
 
-def load_json_file(filename):
-    try:
-        with open(filename, "rt") as f:
-            data = json.load(f)
-    except Exception as e:
-        logger.error('JSONDecodeError in file "%s": %s' % (filename, str(e)))
-        exit()
-    return data
+def load_vars(filename):
+    return load_json_file(filename)
 
 
-def load_vars():
-    return load_json_file("vars.json")
-
-
-def load_hosts(hosts, vars):
+def load_hosts(filename, hosts, vars):
     # with open("hosts.json", "rt") as f:
     #     data = {k: v for k, v in json.load(f).items() if not v.get("disabled", False)}
-    data = load_json_file("hosts.json")
+    data = load_json_file(filename, fail_silently=True if hosts is None else False)
     data = {k: v for k, v in data.items() if not v.get("disabled", False)}
 
     if hosts is None:
@@ -46,6 +38,7 @@ def load_hosts(hosts, vars):
     else:
         for h in hosts:
             if h not in data.keys():
+                print('Available hosts: ' + ','.join(data.keys()))
                 raise Exception('Unknown host "%s"' % h)
         selected_hosts = {k: v for k, v in data.items() if k in hosts}
 
@@ -94,8 +87,8 @@ def load_actions(filename, tags):
 
 
 def work(args):
-    vars = load_vars()
-    hosts = load_hosts(args.hosts, vars)
+    vars = load_vars(args.vars_filename)
+    hosts = load_hosts(args.hosts_filename, args.hosts, vars)
     actions = load_actions(args.actions_filename, args.tags)
     for action in actions:
         for host in hosts:
@@ -116,13 +109,8 @@ def verbosity_to_log_level(verbosity):
 
 
 def main():
-    hosts = load_hosts(None, None)
-
     parser = argparse.ArgumentParser(description="Simple deploy procedure. Required packages: Jinja2. Suggested packages: rich.")
-    parser.add_argument(
-        "hosts", nargs="+", help='One or more deploy targets among: %s. Specify "*" for all.' %
-        ', '.join(hosts)
-    )
+    parser.add_argument("hosts", nargs="+", help='One or more deploy target')
     parser.add_argument("--tags", nargs="*", help="Optional tags for actions filtering")
     parser.add_argument("--actions-filename", "-a", default="deployment")
     parser.add_argument('-v', '--verbosity', type=int, choices=range(3), default=1, action='store', help="log verbosity level. Choose 0, 1 or 2. Default=1")
@@ -132,6 +120,8 @@ def main():
     parser.add_argument(
         "--traceback", action="store_true", help="Print errors traceback"
     )
+    parser.add_argument("--hosts-filename", default="hosts.json", help='hosts filename; default: "hosts.json"')
+    parser.add_argument("--vars-filename", default="vars.json", help='vars filename; default: "vars.json"')
     args = parser.parse_args()
 
     if args.extra_debug and args.verbosity < 2:
@@ -159,7 +149,6 @@ def main():
         logger.error(e)
         if args.traceback:
             logger.error(traceback.format_exc())
-
 
 # if __name__ == "__main__":
 #     main()

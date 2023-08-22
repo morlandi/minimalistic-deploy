@@ -23,7 +23,7 @@ def load_vars(filename):
     return load_json_file(filename)
 
 
-def load_hosts(filename, hosts, vars):
+def load_hosts(filename, hosts, vars, files_foldername):
     # with open("hosts.json", "rt") as f:
     #     data = {k: v for k, v in json.load(f).items() if not v.get("disabled", False)}
     data = load_json_file(filename, fail_silently=True if hosts is None else False)
@@ -52,7 +52,7 @@ def load_hosts(filename, hosts, vars):
         host_vars = v.pop('vars', {})
         context = merge_dicts(vars, host_vars)
 
-        params = merge_dicts({'name': k, 'context': Context(**context)}, v)
+        params = merge_dicts({'name': k, 'files_foldername': files_foldername, 'context': Context(**context)}, v)
 
         hosts.append(Host(**params))
 
@@ -88,7 +88,7 @@ def load_actions(filename, tags):
 
 def work(args):
     vars = load_vars(args.vars_filename)
-    hosts = load_hosts(args.hosts_filename, args.hosts, vars)
+    hosts = load_hosts(args.hosts_filename, args.hosts, vars, args.files_foldername)
     actions = load_actions(args.actions_filename, args.tags)
     for action in actions:
         for host in hosts:
@@ -122,6 +122,7 @@ def main():
     )
     parser.add_argument("--hosts-filename", default="hosts.json", help='hosts filename; default: "hosts.json"')
     parser.add_argument("--vars-filename", default="vars.json", help='vars filename; default: "vars.json"')
+    parser.add_argument("--files-foldername", default="files", help='files foldername; default: "files"')
     args = parser.parse_args()
 
     if args.extra_debug and args.verbosity < 2:

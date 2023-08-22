@@ -4,6 +4,8 @@ import logging
 import subprocess
 import traceback
 import jinja2
+import tempfile
+import os
 
 
 class SSHClient():
@@ -72,9 +74,9 @@ class SSHClient():
         result = self._run_remote_command(remote_command)
         return result
 
-    def exec_rsync(self, source, destination, become=False, become_user='', ignore_existing=False, mode='', owner='', group=''):
+    def exec_rsync(self, source, destination, become=False, become_user='', ignore_existing=False, mode='', owner='', group='', as_template=False):
         """
-
+        as_template: render source by render_string() before submitting
         """
         remote_command = 'rsync -avz --progress '
         if self.timeout:
@@ -95,10 +97,23 @@ class SSHClient():
         if self.rsync_options:
             remote_command += self.rsync_options + ' '
 
-        remote_command += f'"{source}" '
-        remote_command += f'"{self._remote_address()}:{destination}" '
+        if as_template:
 
-        result = self._run_remote_command(remote_command)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+
+                source2 = os.path.join(tmpdirname, os.path.basename(source))
+                with open(source, "rt") as f:
+                    text = f.read()
+                    rendered_text = self.render_string(text)
+                    with open(source2, "wt") as f2:
+                        f2.write(rendered_text)
+
+                remote_command += f'"{source2}" "{self._remote_address()}:{destination}" '
+                result = self._run_remote_command(remote_command)
+        else:
+
+            remote_command += f'"{source}" "{self._remote_address()}:{destination}" '
+            result = self._run_remote_command(remote_command)
 
         return result
 
@@ -121,7 +136,7 @@ class SSHClient():
                     stderr=subprocess.STDOUT,
                     encoding='utf-8',
                 )
-                self._print_message(result)
+                #self._print_message(result)
             except subprocess.CalledProcessError as e:
                 if self.verbose:
                     print('ERROR ....................: ' + e.output)

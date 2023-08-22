@@ -1,10 +1,13 @@
 import logging
+import subprocess
+import os
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict
 from collections import UserDict
 import jinja2
 import json
 from .ssh_client import SSHClient
+from .action import Action
 from .utils import merge_dicts
 
 logger = logging.getLogger("deploy")
@@ -30,6 +33,7 @@ class UserDictJsonEncoder(json.JSONEncoder):
 class Host():
     name: str
     address: str
+    files_foldername: str
     context: Context
     ssh_user: str = ''
     errors: int = 0
@@ -67,11 +71,15 @@ class Host():
         else:
 
             if action.type == "command":
+                chdir = action.extra.get('chdir', '')
                 for item in action.items:
                     if not item.startswith('#'):
+                        command = item
+                        if chdir:
+                            command = "cd %s && %s" % (chdir, command)
                         self.run_ssh(
                             action,
-                            item,
+                            command,
                             silent=False
                         )
 
@@ -314,7 +322,7 @@ class Host():
         destination = action.extra['destination']
         for item in action.items:
 
-            source = "files/" + item
+            source = os.path.join(self.files_foldername, item)
             if not os.path.isfile(source):
                 raise Exception(f'File "{source}" not found')
 
@@ -343,6 +351,7 @@ class Host():
             mode=action.extra.get('mode', ''),
             owner=action.extra.get('owner', ''),
             group=action.extra.get('group', ''),
+            as_template=action.extra.get('template', False)
         )
 
         if action.register:
